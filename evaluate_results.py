@@ -1,15 +1,15 @@
+# evaluate_results.py
 import torch
 from tqdm import tqdm
-from loading_llama import load_llama_base
-from integrate_fedalt import apply_fedalt_to_llama
-from loading_data import get_task_specific_data
-from config import LORA_RANK
+from transformers import AutoProcessor
+from loading_llama import load_phi3_vision_base
+from integrate_fedalt import apply_fedalt_to_vlm
+from loading_data import get_task_specific_data, TASK_MAPPING
+from config import LORA_RANK, PHI3_VISION_ID, DEVICE
 
-def calculate_accuracy(model, tokenizer, test_data):
+def calculate_accuracy(model, processor, test_data):
     """
-    Computes the accuracy for a specific task.
-    For LLMs, we check if the model's highest probability prediction 
-    matches the ground truth label.
+    Computes accuracy using Phi-3 Vision generation.
     """
     model.eval()
     correct = 0
@@ -17,75 +17,60 @@ def calculate_accuracy(model, tokenizer, test_data):
 
     with torch.no_grad():
         for item in tqdm(test_data, desc="Evaluating"):
-            # Prepare inputs and labels
-            prompt = item['instruction'] + "\n" + item['input']
-            label = item['output']
+            # Update: Phi-3 specific prompt format
+            prompt = f"<|user|>\n<|image_1|>\nDescribe this image.<|end|>\n<|assistant|>"
             
-            inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True).to("cuda")
+            inputs = processor(text=prompt, images=item['image'], return_tensors="pt").to(DEVICE)
             
-            # Get model prediction
-            outputs = model.generate(**inputs, max_new_tokens=10)
-            prediction = tokenizer.decode(outputs[0], skip_special_tokens=True)
+            # Generate prediction
+            outputs = model.generate(**inputs, max_new_tokens=32)
+            # Decode only the assistant's part (skipping inputs)
+            full_text = processor.decode(outputs[0], skip_special_tokens=True)
+            prediction = full_text.split("assistant")[-1]
 
-            # Simple string matching for evaluation (Standard for Flan-v2 tasks)
-            if label.strip().lower() in prediction.strip().lower():
+            if item['text'].strip().lower() in prediction.strip().lower():
                 correct += 1
             total += 1
 
-    return (correct / total) * 100
+    return (correct / total) * 100 if total > 0 else 0
 
-def generate_fedalt_table(client_states):
-    """
-    Runs evaluation for all 8 tasks and prints a table matching the paper's format.
-    """
-    tasks = [
-        "CommonSense", "Coreference", "NLI", "Paraphrase", 
-        "ReadingComp", "Sentiment", "StructToText", "TextClass"
-    ]
+def generate_fedalt_table():
+    tasks = list(TASK_MAPPING.keys())
     
-    # Initialize Model
-    model, tokenizer = load_llama_base()
-    model = apply_fedalt_to_llama(model, rank=LORA_RANK)
+    # 1. Initialize Phi-3 Model and FedALT
+    model, _ = load_phi3_vision_base()
+    model = apply_fedalt_to_vlm(model, rank=LORA_RANK)
+    processor = AutoProcessor.from_pretrained(PHI3_VISION_ID, trust_remote_code=True)
+
+    # 2. Load trained states
+    print("Loading personalized weights...")
+    try:
+        client_states = torch.load("fedalt_phi3_final.pt")
+    except:
+        print("Final states not found. Using initialized weights.")
+        client_states = {i: None for i in range(8)}
 
     results = {}
-
     for i, task_name in enumerate(tasks):
-        print(f"\n--- Evaluating Task: {task_name} ---")
+        print(f"\n--- Evaluating Client {i} on Task: {task_name} ---")
         
-        # 1. Load the trained brain for this specific client
+        # Load the personalized state for this client
         if client_states[i] is not None:
             model.load_state_dict(client_states[i], strict=False)
         
-        # 2. Load separate TEST data (distinct from training data)
-        test_data = get_task_specific_data(task_name, num_samples=200) # num_samples for speed
-        
-        # 3. Calculate Score
-        score = calculate_accuracy(model, tokenizer, test_data)
+        # Evaluate on task-specific test data
+        test_data = get_task_specific_data(task_name, num_samples=50)
+        score = calculate_accuracy(model, processor, test_data)
         results[task_name] = score
 
-    # --- PRINT THE MATHEMATICAL TABLE ---
+    # --- PRINT THE RESULTS ---
     print("\n" + "="*50)
-    print(f"{'Task Name':<25} | {'FedALT Score':<15}")
+    print(f"{'Task Name':<20} | {'Sub-Dataset':<15} | {'Score':<10}")
     print("-" * 50)
-    
-    total_score = 0
     for task, score in results.items():
-        print(f"{task:<25} | {score:>14.2f}")
-        total_score += score
-    
-    print("-" * 50)
-    print(f"{'AVERAGE':<25} | {total_score/len(tasks):>14.2f}")
+        subset = TASK_MAPPING[task]
+        print(f"{task:<20} | {subset:<15} | {score:>8.2f}")
     print("="*50)
 
-
-def run_full_evaluation():
-    # 1. Load the states we saved in the main training file
-    print("Loading personalized weights...")
-    client_states = torch.load("fedalt_final_client_states.pt")
-
-    # 2. Call the table generation function (the one I gave you earlier)
-    # This will loop through each client, load their weights, and calculate accuracy
-    generate_fedalt_table(client_states)
-
 if __name__ == "__main__":
-    run_full_evaluation()
+    generate_fedalt_table()

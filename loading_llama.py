@@ -1,14 +1,11 @@
+# loading_llama.py
 import torch
-from transformers import LlavaForConditionalGeneration, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 from config import MODEL_ID
 
-def load_llama_base(model_id=MODEL_ID):
-    """
-    Loads the LLaVA-1.5 VLM with 4-bit quantization.
-    """
-    print(f"Loading VLM model: {model_id}...")
+def load_phi3_vision_base(model_id=MODEL_ID):
+    print(f"Loading Phi-3 Vision: {model_id}...")
 
-    # 1. 4-bit Quantization Config (Critical for VRAM efficiency)
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -16,21 +13,21 @@ def load_llama_base(model_id=MODEL_ID):
         bnb_4bit_use_double_quant=True,
     )
 
-    # 2. Load the VLM (LLaVA)
-    # We use LlavaForConditionalGeneration, not AutoModelForCausalLM
-    model = LlavaForConditionalGeneration.from_pretrained(
+    model = AutoModelForCausalLM.from_pretrained(
         model_id,
         quantization_config=bnb_config,
         device_map="auto",
-        torch_dtype=torch.float16
+        trust_remote_code=True, 
+        torch_dtype=torch.float16,
+        _attn_implementation='eager' # Compatibility for GTX 1080 Ti
     )
 
-    # 3. Freeze Base Parameters
-    # We only want to train the FedALT adapters we add later
+    # Required fixes for training Phi-3 Vision
+    model.config.use_cache = False  # Fixes 'DynamicCache' AttributeError
+    model.gradient_checkpointing_enable() # Saves VRAM by not storing activations
+    model.enable_input_require_grads()
+
     for param in model.parameters():
         param.requires_grad = False
 
-    print("LLaVA model loaded successfully (4-bit) and base parameters frozen.")
-    
-    # We return None for tokenizer because VLMs use a 'Processor' instead
     return model, None

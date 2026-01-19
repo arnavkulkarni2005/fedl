@@ -4,52 +4,55 @@ from datasets import load_dataset
 from PIL import Image
 import numpy as np
 
-def get_multimodal_data(num_samples=100):
+# Task to Dataset Mapping for 'the_cauldron'
+TASK_MAPPING = {
+    "CommonSense": "aokvqa",
+    "Coreference": "visual7w",
+    "NLI": "nlvr2",
+    "Paraphrase": "textcaps",
+    "ReadingComp": "scienceqa",
+    "Sentiment": "hateful_memes",
+    "StructToText": "chart2text",
+    "TextClass": "textvqa"
+}
+
+def get_task_specific_data(task_name, num_samples=100):
     """
-    Fetches image-text pairs. 
-    Uses 'HuggingFaceM4/the_cauldron' (subset: coco_caption) or generates dummies.
+    Fetches image-text pairs for a specific task subset.
     """
+    subset = TASK_MAPPING.get(task_name, "okvqa")
     data = []
     try:
-        # Try loading a small streaming dataset
-        ds = load_dataset("HuggingFaceM4/the_cauldron", "coco_caption", split="train", streaming=True)
+        # Load specific subset in streaming mode
+        ds = load_dataset("HuggingFaceM4/the_cauldron", subset, split="train", streaming=True)
         iterable = iter(ds)
         
         for _ in range(num_samples):
             item = next(iterable)
-            # Structure: {'images': [PIL.Image], 'texts': ["Caption"]}
-            if len(item['images']) > 0:
+            # The Cauldron standard format: {'images': [PIL], 'texts': [str]}
+            if len(item['images']) > 0 and len(item['texts']) > 0:
                 data.append({
                     "image": item['images'][0], 
-                    "text": item['texts'][0]
+                    "text": item['texts'][0],
+                    "task": task_name
                 })
     except Exception as e:
-        print(f"Dataset load failed/skipped ({e}). Using synthetic dummy data for testing.")
-        # Create Dummy Data for debugging pipeline
+        print(f"Task {task_name} ({subset}) failed: {e}. Falling back to dummy.")
         for i in range(num_samples):
-            # Create a random noise image
             img = Image.fromarray(np.random.randint(0, 255, (336, 336, 3), dtype=np.uint8))
-            data.append({
-                "image": img,
-                "text": f"This is a caption for image {i}"
-            })
+            data.append({"image": img, "text": f"Dummy {task_name} answer {i}", "task": task_name})
             
     return data
 
 def assign_tasks_to_8_clients():
     """
-    Distributes VLM tasks. 
-    For VLM, we might split by 'context' (e.g., Client 1 gets food images, Client 2 gets animal images)
-    For now, we shuffle and split the generic pool.
+    Assigns each client a unique task from the multi-task list.
     """
-    full_data = get_multimodal_data(num_samples=800) # 100 per client
-    
+    tasks = list(TASK_MAPPING.keys())
     federated_data = {}
-    chunk_size = len(full_data) // 8
     
-    for i in range(8):
-        start = i * chunk_size
-        federated_data[i] = full_data[start : start + chunk_size]
-        print(f"Client {i} assigned {len(federated_data[i])} multi-modal samples.")
+    for i, task_name in enumerate(tasks):
+        print(f"Assigning Client {i} to TASK: {task_name}...")
+        federated_data[i] = get_task_specific_data(task_name, num_samples=100)
         
     return federated_data

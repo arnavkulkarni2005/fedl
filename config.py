@@ -2,34 +2,32 @@
 import torch
 
 # --- PHASE 2: MULTI-MODAL SETTINGS ---
-# We use LLaVA-1.5-7b because it uses Llama as the decoder, 
-# making it compatible with your existing 4-bit quantization code.
-MODEL_ID = "llava-hf/llava-1.5-7b-hf" 
+# Switching to Phi-3.5 Vision for 11GB VRAM compatibility (GTX 1080 Ti)
+PHI3_VISION_ID = "microsoft/Phi-3.5-vision-instruct"
+MODEL_ID = PHI3_VISION_ID  # Retained for compatibility with existing import statements
 USE_4BIT = True
 
 # FedALT Hyperparameters
-NUM_CLIENTS = 8
-ROUNDS = 5
+NUM_CLIENTS = 3
+ROUNDS = 3
 LOCAL_EPOCHS = 1
-BATCH_SIZE = 2 # Reduced batch size for VLM (Images take VRAM)
+BATCH_SIZE = 1 # Images take significant VRAM
 LEARNING_RATE = 1e-4
-WEIGHT_DECAY = 0.01
 
 # LoRA & Mixer Settings
 LORA_RANK = 8
-LORA_ALPHA = 16
 
-# TARGET MODULES: This is the "Dual-Stream" Logic
-# 'q_proj', 'v_proj' -> Targets the Language Decoder (Llama)
-# 'q_proj', 'v_proj' inside 'vision_tower' -> Targets the Vision Encoder (CLIP)
-TARGET_MODULES = ["q_proj", "v_proj"] 
+# TARGET MODULES: Updated for Phi-3 Architecture
+# Unlike LLaVA, Phi-3 typically packs attention into 'qkv_proj'
+TARGET_MODULES = ["qkv_proj", "o_proj", "gate_up_proj", "down_proj"] 
 
 # Dataset Settings
-DATASET_NAME = "HuggingFaceM4/the_cauldron" # Multi-modal dataset collection
-SUBSET_NAME = "coco_caption" # Simplest task for prototyping
+# config.py
+DATASET_NAME = "HuggingFaceM4/the_cauldron"
+SUBSET_NAME = "okvqa"  # Changed from "coco_caption" which was not found
 MAX_SEQ_LENGTH = 128
-MAX_IMAGE_TOKEN = 576 # Standard for LLaVA
-SAMPLES_PER_CLIENT = 200 
+# Phi-3.5 supports high resolution; 1024 is a safe limit for your 11GB VRAM
+MAX_IMAGE_TOKEN = 256 
 
 # Hardware
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
