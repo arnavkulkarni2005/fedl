@@ -1,75 +1,87 @@
-# FedALT-VLM: Federated Multi-Task Fine-Tuning for Vision-Language Models
+# FedALT-VLM: Privacy-Preserving AI on Consumer Hardware
 
-## Overview
-**FedALT-VLM** is a specialized Federated Learning framework designed to fine-tune Vision-Language Models (VLMs) on non-IID (non-independent and identically distributed) multi-modal data.
+## The Elevator Pitch
+**FedALT-VLM** is a system that allows multiple AI models to learn together without sharing their private data.
 
-Built from scratch using **PyTorch** and **Hugging Face Transformers**, this project addresses the challenge of training a single foundation model (**Phi-3.5 Vision**) on diverse downstream tasks—such as Visual Question Answering (VQA), Image Captioning, and Sentiment Analysis—without centralizing raw user data.
+Imagine 8 different hospitals interacting with an AI. One hospital asks about X-rays, another about MRI scans. Instead of sending sensitive patient data to a central server, our system allows each hospital to train a local adapter (a small "brain") on their own data. They then share *only* the mathematical updates—not the images—to build a smarter collective intelligence.
 
-The core innovation is the implementation of the **FedALT (Federated Adaptive LoRA Tuning)** architecture, which dynamically balances personalized local learning with global knowledge aggregation.
+We built this from scratch to run on a standard **11GB consumer GPU** (like a GTX 1080 Ti), proving that advanced Multi-Modal AI doesn't require massive data centers.
 
 ---
 
-## Architecture: The FedALT Layer
-Unlike standard Low-Rank Adaptation (LoRA), which learns a single delta weight $\Delta W$, this project implements a **Dual-Stream Adaptive Mechanism**. The target linear layers of the Phi-3.5 Vision model are replaced with custom `FedALTLayer` modules.
+## Why This Project Stands Out
+Most student projects simply fine-tune a model using existing libraries. Here is how **FedALT-VLM** demonstrates advanced engineering skills suitable for industry applications:
 
-**Mathematical Formulation**
+### 1. We Built the Engine, We Didn't Just Drive It
+* **The Norm:** Most practitioners use the `peft` library to add standard LoRA adapters.
+* **Our Work:** We manually implemented the Low-Rank Adaptation (LoRA) mathematics in PyTorch. We created a custom `FedALTLayer` that dynamically mixes "Local" knowledge with "Global" knowledge using a learned gating mechanism.
+
+### 2. "Impossible" Hardware Optimization
+* **The Challenge:** Vision-Language Models (like Phi-3.5 Vision) usually require 40GB+ of VRAM to train.
+* **Our Solution:** We engineered a pipeline using **4-bit quantization (NF4)** and **Gradient Checkpointing** to fit the entire training process into just **11GB of VRAM**. This demonstrates a deep understanding of low-level memory management and optimization.
+
+### 3. Complex Distributed Logic
+* **The Algorithm:** We implemented a "Leave-One-Out" aggregation strategy. When the server updates Client A, it aggregates knowledge from Clients B, C, D... but *excludes* Client A's own previous contributions to prevent feedback loops. This is far more complex than standard Federated Averaging.
+
+---
+
+## Technical Architecture
+
+The architecture splits the learning process into two distinct streams to balance personalization with generalization.
+
+### The Dual-Stream Mechanism
+1.  **The "Individual" Stream:**
+    * **Goal:** Become an expert at the local task (e.g., answering questions about charts).
+    * **Mechanism:** A private adapter that updates *only* on local data.
+2.  **The "Rest-of-World" Stream:**
+    * **Goal:** Learn general knowledge from everyone else (e.g., recognizing objects).
+    * **Mechanism:** A frozen adapter that represents the collective intelligence of all other clients.
+3.  **The Mixer:**
+    * A lightweight neural network decides, token-by-token, whether to trust the **Individual** expert or the **Rest-of-World** generalist.
+
+### Mathematical Formulation
 For any linear layer output $y$ and input $x$, the output is computed as:
+
 $$y = W_{frozen}x + \alpha_{loc}(x) \cdot (B_{loc}A_{loc}x) + \alpha_{row}(x) \cdot (B_{row}A_{row}x)$$
 
+Where:
 * **$W_{frozen}$**: The quantized 4-bit weights of the pre-trained base model.
-* **Individual LoRA ($A_{loc}, B_{loc}$)**: Captures client-specific task knowledge (updated locally).
-* **Rest-of-World (RoW) LoRA ($A_{row}, B_{row}$)**: Aggregates weights from all *other* clients (frozen during local training).
-* **Adaptive Mixer ($\alpha$)**: A learned gating network that outputs dynamic scalar weights ($\alpha_{loc}, \alpha_{row}$) to contextually blend local and global streams per token.
+* **Individual LoRA ($A_{loc}, B_{loc}$)**: Captures client-specific task knowledge.
+* **Rest-of-World LoRA ($A_{row}, B_{row}$)**: Aggregates weights from all other clients.
+* **Adaptive Mixer ($\alpha$)**: A learned gating network that outputs dynamic scalar weights ($\alpha_{loc}, \alpha_{row}$).
 
 ---
 
-## Key Features & Technical Highlights
-
-### Custom Parameter-Efficient Fine-Tuning (PEFT)
-* **Manual Implementation**: Implemented custom `torch.nn.Module` classes (`IndividualLoRA`, `RestOfWorldLoRA`) instead of using off-the-shelf libraries to support the specific dual-stream requirement.
-* **Targeted Adaptation**: Specifically targets `qkv_proj`, `o_proj`, `gate_up_proj`, and `down_proj` layers within the Phi-3.5 attention blocks.
-
-### Federated Learning Simulation
-* **Client Heterogeneity**: Simulates **8 distinct clients**, each assigned a unique task from the **HuggingFaceM4/the_cauldron** dataset (e.g., OK-VQA, TextCaps, ScienceQA).
-* **"Rest-of-World" Aggregation**: Implemented a custom server-side aggregation logic that calculates a unique global context for each client by excluding their own weights from the sum ($GlobalSum - ClientWeight$).
-
-### Hardware-Aware Optimization
-* **Consumer GPU Compatibility**: Engineered to run on 11GB VRAM (e.g., GTX 1080 Ti) by leveraging **4-bit NF4 quantization** (`bitsandbytes`) and **Gradient Checkpointing**.
-* **Orthogonal Regularization**: A custom loss term enforces orthogonality between Local and RoW matrices to prevent feature redundancy.
+## Tech Stack
+* **Frameworks:** PyTorch, Hugging Face Transformers
+* **Model:** Microsoft Phi-3.5 Vision (Quantized)
+* **Techniques:** Federated Learning, Low-Rank Adaptation (LoRA), 4-bit Quantization
+* **Hardware Target:** Single NVIDIA GTX 1080 Ti (11GB VRAM)
 
 ---
 
-## Repository Structure
-
-* `fedalt_layer.py`: Defines the composite layer combining Base, Individual LoRA, RoW LoRA, and the Mixer.
-* `fedalt_modules.py`: Low-level implementation of the rank-decomposition matrices and gating network.
-* `main_federated_train.py`: The central engine that orchestrates the training loop, client updates, and server communication.
-* `server_aggregation.py`: Contains the logic for the "Leave-One-Out" weight aggregation strategy.
-* `integrate_fedalt.py`: A utility to dynamically hot-swap standard Linear layers in Phi-3 with `FedALTLayer`.
-* `loading_data.py`: Handles streaming multi-task data from The Cauldron dataset.
-* `config.py`: Central configuration for hyperparameters (Rank=16, Learning Rate=2e-4).
+## Project Structure
+* `fedalt_layer.py`: The custom neural network layer we built from scratch.
+* `server_aggregation.py`: The logic for combining weights from different clients using the "Leave-One-Out" strategy.
+* `main_federated_train.py`: The main script that simulates 8 clients training in parallel rounds.
+* `integrate_fedalt.py`: A script that surgically replaces standard layers in the model with our custom layers.
 
 ---
 
-## Installation
+## Quick Start
 
-**Prerequisites**
-* Python 3.10+
-* NVIDIA GPU with CUDA support
+### 1. Install Requirements
+```bash
+pip install -r requirements.txt
 
-**Setup**
-1.  Clone the repository.
-2.  Install dependencies:
-    ```bash
-    pip install -r requirements.txt
-    ```
-    *(Dependencies include: `torch`, `transformers`, `bitsandbytes`, `accelerate`, `datasets`)*
-
----
-
-## Usage
-
-### Start Federated Training
-To initialize the model and begin the federated training simulation (defaults to 5 rounds):
+### 2. Run the simulation
 ```bash
 python main_federated_train.py
+
+This will download the model, set up 8 virtual clients, and begin the federated training process.
+
+### 3. Evaluate Success
+```bash
+python evaluate_results.py
+
+Check how well the model learned specific tasks compared to a baseline.
