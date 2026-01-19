@@ -12,7 +12,6 @@ NUM_CLIENTS = 8
 ROUNDS = 5
 LOCAL_EPOCHS = 1
 BATCH_SIZE = 1 # Images take significant VRAM
-LEARNING_RATE = 1e-4
 GRAD_ACCUM_STEPS = 4 # Simulate batch size of 4
 LEARNING_RATE = 2e-4 # Slightly higher for LoRA
 
