@@ -8,14 +8,16 @@ MODEL_ID = PHI3_VISION_ID  # Retained for compatibility with existing import sta
 USE_4BIT = True
 
 # FedALT Hyperparameters
-NUM_CLIENTS = 3
-ROUNDS = 3
+NUM_CLIENTS = 8
+ROUNDS = 5
 LOCAL_EPOCHS = 1
 BATCH_SIZE = 1 # Images take significant VRAM
 LEARNING_RATE = 1e-4
+GRAD_ACCUM_STEPS = 4 # Simulate batch size of 4
+LEARNING_RATE = 2e-4 # Slightly higher for LoRA
 
 # LoRA & Mixer Settings
-LORA_RANK = 8
+LORA_RANK = 16
 
 # TARGET MODULES: Updated for Phi-3 Architecture
 # Unlike LLaVA, Phi-3 typically packs attention into 'qkv_proj'

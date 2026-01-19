@@ -16,7 +16,7 @@ TASK_MAPPING = {
     "TextClass": "textvqa"
 }
 
-def get_task_specific_data(task_name, num_samples=100):
+def get_task_specific_data(task_name, num_samples=200):
     """
     Fetches image-text pairs for a specific task subset.
     """
@@ -53,6 +53,6 @@ def assign_tasks_to_8_clients():
     
     for i, task_name in enumerate(tasks):
         print(f"Assigning Client {i} to TASK: {task_name}...")
-        federated_data[i] = get_task_specific_data(task_name, num_samples=100)
+        federated_data[i] = get_task_specific_data(task_name, num_samples=200)
         
     return federated_data
