@@ -73,15 +73,3 @@ Where:
 ### 1. Install Requirements
 ```bash
 pip install -r requirements.txt
-
-### 2. Run the simulation
-```bash
-python main_federated_train.py
-
-This will download the model, set up 8 virtual clients, and begin the federated training process.
-
-### 3. Evaluate Success
-```bash
-python evaluate_results.py
-
-Check how well the model learned specific tasks compared to a baseline.
