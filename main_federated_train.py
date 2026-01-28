@@ -7,21 +7,17 @@ import os
 import gc
 import time
 
-# Custom Modules
 from loading_llama import load_phi3_vision_base 
 from integrate_fedalt import apply_fedalt_to_vlm
 from loading_data import assign_tasks_to_8_clients
-# FIX: Import the correct function name from your uploaded file
 from server_aggregation import perform_fedalt_aggregation
 from config import *
 
-# --- HELPER: DIRECTORY SETUP ---
 def setup_directories():
     os.makedirs("checkpoints", exist_ok=True)
     os.makedirs("plots", exist_ok=True)
     print("DEBUG: Created 'checkpoints/' and 'plots/' directories.")
 
-# --- HELPER: PLOTTING ---
 def save_loss_plot(history, round_num):
     plt.figure(figsize=(12, 8))
     for client_id, losses in history.items():
@@ -164,41 +160,51 @@ def main():
         print(f"\n{'='*20} GLOBAL ROUND {r+1}/{ROUNDS} {'='*20}")
         
         for client_id in range(NUM_CLIENTS):
-            # 1. Load Personal + Global Weights
+            
+            client_ckpt_path = f"checkpoints/round_{r+1}_client_{client_id}_done.pt"
+
+            if os.path.exists(client_ckpt_path):
+                print(f"   -> Found checkpoint for Client {client_id}. Loading and SKIPPING training...")
+                
+                saved_data = torch.load(client_ckpt_path)
+                client_local_states[client_id] = saved_data['weights']
+                history[client_id].append(saved_data['loss'])
+                
+                
+                continue 
+
             if client_local_states[client_id]:
                 model.load_state_dict(client_local_states[client_id], strict=False)
             if client_row_states[client_id]:
                 model.load_state_dict(client_row_states[client_id], strict=False)
             
-            # 2. Train
             weights, avg_loss = train_one_client_vlm(client_id, model, processor, client_datasets[client_id])
             
-            # 3. Store
             client_local_states[client_id] = weights
             history[client_id].append(avg_loss)
             
-            # 4. Check
+            print(f"      [Checkpoint] Saving progress for Client {client_id}...")
+            torch.save({
+                'weights': weights,
+                'loss': avg_loss,
+                
+            }, client_ckpt_path)
+            
             quick_eval(model, processor, client_id, client_datasets[client_id])
             gc.collect()
             torch.cuda.empty_cache()
 
-        # 5. AGGREGATION FIX
         print("\nDEBUG: Server Aggregating...")
         
-        # FIX: Convert dict {0: w, 1: w} -> List [w, w] for server_aggregation.py
         client_weights_list = [client_local_states[i] for i in range(NUM_CLIENTS)]
         
         if any(w is None for w in client_weights_list):
-            print("CRITICAL: Some clients failed. Skipping aggregation.")
+            print("CRITICAL: Some clients failed or data is missing. Skipping aggregation.")
             continue
 
-        # Returns List of ROW weights
         row_weights_list = perform_fedalt_aggregation(client_weights_list)
-        
-        # FIX: Convert List -> Dict {0: row0, 1: row1}
         client_row_states = {i: row_weights_list[i] for i in range(NUM_CLIENTS)}
 
-        # 6. Save
         ckpt_path = f"checkpoints/fedalt_round_{r+1}.pt"
         torch.save({'local': client_local_states, 'row': client_row_states}, ckpt_path)
         save_loss_plot(history, r+1)

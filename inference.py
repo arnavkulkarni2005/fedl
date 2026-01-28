@@ -24,7 +24,7 @@ def run_test():
     model = apply_fedalt_to_vlm(model, rank=LORA_RANK)
 
     # 3. Load Your Trained Weights
-    checkpoint_path = "checkpoints/fedalt_final.pt"
+    checkpoint_path = "/home/kulkarni/projects/fedl/fedl/checkpoints/round_2_client_7_done.pt"
     if not os.path.exists(checkpoint_path):
         print(f"CRITICAL ERROR: {checkpoint_path} not found!")
         return
@@ -67,9 +67,6 @@ def run_test():
                 pad_token_id=processor.tokenizer.pad_token_id,
                 use_cache=False 
             )
-
-        # CRITICAL FIX: Slice off the input tokens before decoding!
-        # This prevents the tokenizer from choking on the negative Image IDs.
         input_token_len = inputs.input_ids.shape[1]
         generated_tokens = generate_ids[:, input_token_len:]
         

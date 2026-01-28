@@ -9,7 +9,7 @@ USE_4BIT = True
 
 # FedALT Hyperparameters
 NUM_CLIENTS = 8
-ROUNDS = 5
+ROUNDS = 4
 LOCAL_EPOCHS = 1
 BATCH_SIZE = 1 # Images take significant VRAM
 GRAD_ACCUM_STEPS = 4 # Simulate batch size of 4
