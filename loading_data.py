@@ -8,15 +8,10 @@ import numpy as np
 TASK_MAPPING = {
     "CommonSense": "aokvqa",
     "Coreference": "visual7w",
-    "NLI": "nlvr2",
-    "Paraphrase": "textcaps",
-    "ReadingComp": "scienceqa",
-    "Sentiment": "hateful_memes",
-    "StructToText": "chart2text",
-    "TextClass": "textvqa"
+    "NLI": "nlvr2"
 }
 
-def get_task_specific_data(task_name, num_samples=160):
+def get_task_specific_data(task_name, num_samples=200):
     """
     Fetches image-text pairs for a specific task subset.
     """
@@ -44,7 +39,7 @@ def get_task_specific_data(task_name, num_samples=160):
             
     return data
 
-def assign_tasks_to_8_clients():
+def assign_tasks_to_3_clients():
     """
     Assigns each client a unique task from the multi-task list.
     """
@@ -53,6 +48,6 @@ def assign_tasks_to_8_clients():
     
     for i, task_name in enumerate(tasks):
         print(f"Assigning Client {i} to TASK: {task_name}...")
-        federated_data[i] = get_task_specific_data(task_name, num_samples=160)
+        federated_data[i] = get_task_specific_data(task_name, num_samples=200)
         
     return federated_data

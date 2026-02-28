@@ -5,11 +5,12 @@ from transformers import AutoProcessor
 import matplotlib.pyplot as plt
 import os
 import gc
+
 import time
 
-from loading_llama import load_phi3_vision_base 
+from loading_phi3 import load_phi3_vision_base 
 from integrate_fedalt import apply_fedalt_to_vlm
-from loading_data import assign_tasks_to_8_clients
+from loading_data import assign_tasks_to_3_clients
 from server_aggregation import perform_fedalt_aggregation
 from config import *
 
@@ -145,11 +146,16 @@ def main():
     
     print("DEBUG: Loading Base Model...")
     model, _ = load_phi3_vision_base()
-    processor = AutoProcessor.from_pretrained(MODEL_ID, trust_remote_code=True)
+
+    processor = AutoProcessor.from_pretrained(
+    MODEL_ID, 
+    trust_remote_code=True, 
+    num_crops=4 
+)
     model = apply_fedalt_to_vlm(model, rank=LORA_RANK)
     
     print("DEBUG: Loading Data...")
-    client_datasets = assign_tasks_to_8_clients()
+    client_datasets = assign_tasks_to_3_clients()
     
     client_local_states = {i: None for i in range(NUM_CLIENTS)}
     client_row_states = {i: None for i in range(NUM_CLIENTS)}
